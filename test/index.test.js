@@ -3,11 +3,13 @@ import assert from 'node:assert/strict';
 import { mkdtemp, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import process from 'node:process';
 
 import {
   readText,
   writeText,
-  resolvePath
+  resolvePath,
+  getRuntimeInfo
 } from '../src/index.js';
 
 describe('node-core-easy-kit', () => {
@@ -122,6 +124,52 @@ describe('node-core-easy-kit', () => {
       assert.throws(() => resolvePath('valid', 123), TypeError);
       assert.throws(() => resolvePath('valid', null), TypeError);
       assert.throws(() => resolvePath('valid', ''), TypeError);
+    });
+  });
+
+  describe('Runtime Information Operations', () => {
+    it('should return system and process metadata correctly', () => {
+      const info = getRuntimeInfo();
+
+      assert.strictEqual(typeof info.nodeVersion, 'string');
+      assert.ok(info.nodeVersion.startsWith('v'));
+      assert.strictEqual(info.nodeVersion, process.version);
+
+      assert.strictEqual(typeof info.platform, 'string');
+      assert.strictEqual(info.platform, process.platform);
+
+      assert.strictEqual(typeof info.architecture, 'string');
+      assert.strictEqual(info.architecture, process.arch);
+
+      assert.strictEqual(typeof info.workingDirectory, 'string');
+      assert.strictEqual(info.workingDirectory, process.cwd());
+    });
+
+    it('should never expose environment variables or credentials', () => {
+      const info = getRuntimeInfo();
+
+      assert.strictEqual(info.env, undefined);
+      assert.strictEqual(info.processEnv, undefined);
+      assert.strictEqual(info.secrets, undefined);
+      assert.strictEqual(info.PASSWORD, undefined);
+      assert.strictEqual(info.API_KEY, undefined);
+
+      const keys = Object.keys(info).sort();
+      assert.deepStrictEqual(keys, [
+        'architecture',
+        'nodeVersion',
+        'platform',
+        'workingDirectory'
+      ]);
+    });
+
+    it('should return a frozen, immutable object', () => {
+      const info = getRuntimeInfo();
+      assert.ok(Object.isFrozen(info));
+
+      assert.throws(() => {
+        info.nodeVersion = 'hacked';
+      }, TypeError);
     });
   });
 });
