@@ -2,15 +2,26 @@
  * node-core-easy-kit
  *
  * A beginner-friendly, zero-dependency Node.js utility library exploring
- * foundational core modules: node:fs/promises, node:path, node:process, node:timers/promises, and node:crypto.
+ * foundational core modules:
+ * - node:fs/promises
+ * - node:path
+ * - node:process
+ * - node:timers/promises
+ * - node:crypto
+ * - node:os
+ * - node:url
+ * - node:perf_hooks
  *
  * @module node-core-easy-kit
  */
 
-import { readFile, writeFile, mkdir, access, rm } from 'node:fs/promises';
-import { createHash } from 'node:crypto';
+import { readFile, writeFile, mkdir, access, rm, readdir, stat } from 'node:fs/promises';
+import { createHash, randomUUID } from 'node:crypto';
 import path from 'node:path';
 import process from 'node:process';
+import os from 'node:os';
+import { pathToFileURL, fileURLToPath } from 'node:url';
+import { performance } from 'node:perf_hooks';
 import { setTimeout as sleep } from 'node:timers/promises';
 
 /* ========================================================================== */
@@ -20,27 +31,10 @@ import { setTimeout as sleep } from 'node:timers/promises';
 /**
  * Asynchronously reads a UTF-8 text file and returns its entire content as a string.
  *
- * How it works:
- * Uses Node's built-in `node:fs/promises` to read files without blocking the main event loop.
- * If the file does not exist, Node throws an error with `code: 'ENOENT'` ("Error NO ENTry"),
- * preserving the original error code and stack trace for debugging.
- *
  * @param {string} filePath - Path to the file to read (relative or absolute).
  * @returns {Promise<string>} The UTF-8 text content of the file.
  * @throws {TypeError} If filePath is not a valid non-empty string.
  * @throws {NodeJS.ErrnoException} If a filesystem error occurs (e.g., file not found).
- *
- * @example
- * import { readText } from 'node-core-easy-kit';
- *
- * try {
- *   const content = await readText('./notes.txt');
- *   console.log(content);
- * } catch (error) {
- *   if (error.code === 'ENOENT') {
- *     console.error('File not found!');
- *   }
- * }
  */
 export async function readText(filePath) {
   if (typeof filePath !== 'string' || filePath.trim().length === 0) {
@@ -57,22 +51,11 @@ export async function readText(filePath) {
  * If the target file already exists, its contents will be completely overwritten.
  * If the file does not exist, it will be created.
  *
- * How it works:
- * 1. Computes the parent directory using `path.dirname(filePath)`.
- * 2. Uses `mkdir(parentDir, { recursive: true })` to safely create any missing folders in the path.
- * 3. Writes the content using UTF-8 encoding.
- *
  * @param {string} filePath - Target file destination path.
  * @param {string} content - Text content to write into the file.
  * @returns {Promise<void>} Resolves when writing finishes.
  * @throws {TypeError} If filePath is not a non-empty string, or content is not a string.
  * @throws {NodeJS.ErrnoException} If the filesystem rejects writing (e.g., permission denied).
- *
- * @example
- * import { writeText } from 'node-core-easy-kit';
- *
- * // Automatically creates 'nested/folder/' if it doesn't exist yet!
- * await writeText('./nested/folder/log.txt', 'Operation successful at ' + new Date().toISOString());
  */
 export async function writeText(filePath, content) {
   if (typeof filePath !== 'string' || filePath.trim().length === 0) {
@@ -95,22 +78,12 @@ export async function writeText(filePath, content) {
 /**
  * Asynchronously reads and parses a JSON file from disk.
  *
- * How it works:
- * Reads file contents using `readText` (UTF-8) and parses it using `JSON.parse()`.
- * If parsing fails, wraps the error in a descriptive SyntaxError detailing the offending file.
- *
  * @template T
  * @param {string} filePath - Path to the JSON file.
  * @returns {Promise<T>} The parsed JSON data.
  * @throws {TypeError} If filePath is not a valid non-empty string.
  * @throws {SyntaxError} If the file does not contain valid JSON syntax.
  * @throws {NodeJS.ErrnoException} If the file cannot be accessed (e.g. ENOENT).
- *
- * @example
- * import { readJson } from 'node-core-easy-kit';
- *
- * const pkg = await readJson('./package.json');
- * console.log(pkg.name);
  */
 export async function readJson(filePath) {
   const text = await readText(filePath);
@@ -128,19 +101,12 @@ export async function readJson(filePath) {
  * Asynchronously serializes a JavaScript value to JSON and writes it to disk.
  * Automatically creates any missing parent directories.
  *
- * Overwriting Notice: Overwrites any existing file at the specified path.
- *
  * @param {string} filePath - Target file destination path.
  * @param {*} data - Serializable data (object, array, number, boolean, string).
  * @param {Object} [options] - Optional formatting options.
  * @param {number|string} [options.spaces=2] - Number of indentation spaces or indentation string.
  * @returns {Promise<void>} Resolves when the file is written.
  * @throws {TypeError} If filePath is not a non-empty string, or data is circular / not serializable.
- *
- * @example
- * import { writeJson } from 'node-core-easy-kit';
- *
- * await writeJson('./data/settings.json', { theme: 'dark', notifications: true });
  */
 export async function writeJson(filePath, data, options = {}) {
   const spaces = options && options.spaces !== undefined ? options.spaces : 2;
@@ -162,20 +128,9 @@ export async function writeJson(filePath, data, options = {}) {
 /**
  * Checks whether a file or directory exists at the given path.
  *
- * How it works:
- * Uses `fs.promises.access()`. If accessible, returns `true`.
- * If Node returns `ENOENT`, gracefully returns `false`.
- *
  * @param {string} filePath - Path to check.
  * @returns {Promise<boolean>} True if the file/folder exists, false otherwise.
  * @throws {TypeError} If filePath is not a non-empty string.
- *
- * @example
- * import { fileExists } from 'node-core-easy-kit';
- *
- * if (await fileExists('./config.json')) {
- *   console.log('Config exists!');
- * }
  */
 export async function fileExists(filePath) {
   if (typeof filePath !== 'string' || filePath.trim().length === 0) {
@@ -196,18 +151,9 @@ export async function fileExists(filePath) {
 /**
  * Safely removes a file or directory tree at the specified path.
  *
- * How it works:
- * Uses `fs.promises.rm(filePath, { recursive: true, force: true })`.
- * If the file does not exist, it quietly succeeds without throwing an error (`force: true`).
- *
  * @param {string} filePath - Path of the file or directory to delete.
  * @returns {Promise<void>} Resolves when removal finishes.
  * @throws {TypeError} If filePath is not a non-empty string.
- *
- * @example
- * import { removeFile } from 'node-core-easy-kit';
- *
- * await removeFile('./tmp/scratch.txt');
  */
 export async function removeFile(filePath) {
   if (typeof filePath !== 'string' || filePath.trim().length === 0) {
@@ -217,6 +163,62 @@ export async function removeFile(filePath) {
   await rm(filePath, { recursive: true, force: true });
 }
 
+/**
+ * Asynchronously lists directory entries with metadata.
+ *
+ * @param {string} dirPath - Path to the directory.
+ * @param {Object} [options] - Optional options.
+ * @param {boolean} [options.recursive=false] - Whether to list entries recursively.
+ * @returns {Promise<Array<{ name: string, isDirectory: boolean, isFile: boolean, isSymbolicLink: boolean, path: string }>>}
+ * @throws {TypeError} If dirPath is not a non-empty string.
+ */
+export async function listDirectory(dirPath, options = {}) {
+  if (typeof dirPath !== 'string' || dirPath.trim().length === 0) {
+    throw new TypeError('Expected "dirPath" to be a non-empty string.');
+  }
+
+  const recursive = Boolean(options?.recursive);
+  const entries = await readdir(dirPath, { withFileTypes: true, recursive });
+
+  return entries.map((entry) => {
+    const parent = entry.parentPath || dirPath;
+    return Object.freeze({
+      name: entry.name,
+      isDirectory: entry.isDirectory(),
+      isFile: entry.isFile(),
+      isSymbolicLink: entry.isSymbolicLink(),
+      path: path.join(parent, entry.name)
+    });
+  });
+}
+
+/**
+ * Returns the size of a file in bytes and human-readable units.
+ *
+ * @param {string} filePath - Path to the file.
+ * @returns {Promise<{ bytes: number, formatted: string }>}
+ * @throws {TypeError} If filePath is not a non-empty string.
+ */
+export async function getFileSize(filePath) {
+  if (typeof filePath !== 'string' || filePath.trim().length === 0) {
+    throw new TypeError('Expected "filePath" to be a non-empty string.');
+  }
+
+  const stats = await stat(filePath);
+  const bytes = stats.size;
+
+  let formatted = `${bytes} B`;
+  if (bytes >= 1024 ** 3) {
+    formatted = `${(bytes / 1024 ** 3).toFixed(2)} GB`;
+  } else if (bytes >= 1024 ** 2) {
+    formatted = `${(bytes / 1024 ** 2).toFixed(2)} MB`;
+  } else if (bytes >= 1024) {
+    formatted = `${(bytes / 1024).toFixed(2)} KB`;
+  }
+
+  return Object.freeze({ bytes, formatted });
+}
+
 /* ========================================================================== */
 /*                              PATH UTILITIES                                */
 /* ========================================================================== */
@@ -224,25 +226,9 @@ export async function removeFile(filePath) {
 /**
  * Resolves a sequence of paths or path segments into an absolute, normalized path.
  *
- * How it works:
- * In Node.js, `path.resolve()` processes path segments from right to left, prepending each
- * until an absolute path is formed. If no absolute path segment is found, it prepends the
- * Current Working Directory (`process.cwd()`).
- *
- * Concepts:
- * - Relative Path: A path that describes location relative to where your code runs (e.g., './data/config.json').
- * - Absolute Path: A complete, unambiguous address starting from the filesystem root.
- * - Current Working Directory (CWD): The directory from which your Node.js command was invoked.
- *
  * @param {...string} parts - One or more path segments to join and resolve.
  * @returns {string} The normalized, cross-platform absolute path.
  * @throws {TypeError} If no segments are passed, or if any segment is not a non-empty string.
- *
- * @example
- * import { resolvePath } from 'node-core-easy-kit';
- *
- * const fullPath = resolvePath('data', 'reports', '2026.csv');
- * console.log(fullPath);
  */
 export function resolvePath(...parts) {
   if (parts.length === 0) {
@@ -265,12 +251,6 @@ export function resolvePath(...parts) {
  * @param {string} filePath - Path or filename (e.g., 'archive.TAR.GZ' or 'document.PDF').
  * @returns {string} The file extension with leading dot in lowercase (e.g. '.pdf'), or '' if none.
  * @throws {TypeError} If filePath is not a non-empty string.
- *
- * @example
- * import { getFileExtension } from 'node-core-easy-kit';
- *
- * getFileExtension('photo.PNG'); // => '.png'
- * getFileExtension('Makefile');  // => ''
  */
 export function getFileExtension(filePath) {
   if (typeof filePath !== 'string' || filePath.trim().length === 0) {
@@ -287,12 +267,6 @@ export function getFileExtension(filePath) {
  * @param {boolean} [includeExtension=true] - Whether to include the file extension.
  * @returns {string} The extracted filename.
  * @throws {TypeError} If filePath is not a non-empty string, or includeExtension is not a boolean.
- *
- * @example
- * import { getFileName } from 'node-core-easy-kit';
- *
- * getFileName('/path/to/script.test.js');        // => 'script.test.js'
- * getFileName('/path/to/script.test.js', false); // => 'script.test'
  */
 export function getFileName(filePath, includeExtension = true) {
   if (typeof filePath !== 'string' || filePath.trim().length === 0) {
@@ -312,29 +286,55 @@ export function getFileName(filePath, includeExtension = true) {
 }
 
 /* ========================================================================== */
+/*                              URL UTILITIES                                 */
+/* ========================================================================== */
+
+/**
+ * Converts a filesystem file path into a file:// URL string.
+ *
+ * @param {string} filePath - File system path.
+ * @returns {string} Standard file:// URL href.
+ * @throws {TypeError} If filePath is not a non-empty string.
+ *
+ * @example
+ * import { pathToUrl } from 'node-core-easy-kit';
+ * const url = pathToUrl('./data/index.js'); // => 'file:///full/path/to/data/index.js'
+ */
+export function pathToUrl(filePath) {
+  if (typeof filePath !== 'string' || filePath.trim().length === 0) {
+    throw new TypeError('Expected "filePath" to be a non-empty string.');
+  }
+
+  return pathToFileURL(path.resolve(filePath)).href;
+}
+
+/**
+ * Converts a file:// URL string or URL instance into an absolute filesystem path.
+ *
+ * @param {string|URL} fileUrl - File URL string or URL object.
+ * @returns {string} Absolute filesystem path.
+ * @throws {TypeError} If fileUrl is invalid or not a file protocol URL.
+ *
+ * @example
+ * import { urlToPath } from 'node-core-easy-kit';
+ * const localPath = urlToPath(import.meta.url);
+ */
+export function urlToPath(fileUrl) {
+  if (!fileUrl || (typeof fileUrl !== 'string' && !(fileUrl instanceof URL))) {
+    throw new TypeError('Expected "fileUrl" to be a non-empty string or URL instance.');
+  }
+
+  return fileURLToPath(fileUrl);
+}
+
+/* ========================================================================== */
 /*                            PROCESS UTILITIES                               */
 /* ========================================================================== */
 
 /**
  * Returns safe, diagnostic runtime metadata about the current Node.js process and host system.
  *
- * Security Guarantee:
- * This function NEVER inspects or returns environment variables (`process.env`), credentials,
- * tokens, or secret keys. It only exposes safe, non-sensitive system architecture and environment facts.
- *
- * Properties returned:
- * - `nodeVersion`: Current Node.js version string (e.g., 'v20.11.0').
- * - `platform`: Operating system platform identifier (e.g., 'darwin', 'win32', 'linux').
- * - `architecture`: CPU architecture (e.g., 'arm64', 'x64').
- * - `workingDirectory`: The current working directory from which Node was launched (`process.cwd()`).
- *
  * @returns {{ nodeVersion: string, platform: string, architecture: string, workingDirectory: string }}
- *
- * @example
- * import { getRuntimeInfo } from 'node-core-easy-kit';
- *
- * const info = getRuntimeInfo();
- * console.log(`Running on Node ${info.nodeVersion} on ${info.platform} (${info.architecture})`);
  */
 export function getRuntimeInfo() {
   return Object.freeze({
@@ -348,19 +348,7 @@ export function getRuntimeInfo() {
 /**
  * Returns safe, human-readable process memory telemetry in Megabytes (MB).
  *
- * Concepts:
- * - `rssMb` (Resident Set Size): Total memory allocated for the process execution.
- * - `heapTotalMb`: Total size of the allocated V8 JavaScript heap.
- * - `heapUsedMb`: Actual memory currently utilized by active JavaScript objects.
- * - `externalMb`: Memory bound to C++ objects managed by V8 (such as Buffers).
- *
  * @returns {{ rssMb: number, heapTotalMb: number, heapUsedMb: number, externalMb: number }}
- *
- * @example
- * import { getMemoryUsage } from 'node-core-easy-kit';
- *
- * const memory = getMemoryUsage();
- * console.log(`Heap used: ${memory.heapUsedMb} MB / ${memory.heapTotalMb} MB`);
  */
 export function getMemoryUsage() {
   const mem = process.memoryUsage();
@@ -375,29 +363,50 @@ export function getMemoryUsage() {
 }
 
 /* ========================================================================== */
+/*                               OS UTILITIES                                 */
+/* ========================================================================== */
+
+/**
+ * Returns safe host hardware and operating system telemetry.
+ * Never exposes credentials, tokens, or environment secrets.
+ *
+ * @returns {{ hostname: string, platform: string, osRelease: string, cpuCount: number, cpuModel: string, totalMemoryGb: number, freeMemoryGb: number, uptimeHours: number, homeDirectory: string }}
+ *
+ * @example
+ * import { getSystemInfo } from 'node-core-easy-kit';
+ * const sys = getSystemInfo();
+ * console.log(`Cores: ${sys.cpuCount}, RAM: ${sys.totalMemoryGb} GB`);
+ */
+export function getSystemInfo() {
+  const totalMem = os.totalmem();
+  const freeMem = os.freemem();
+  const toGb = (bytes) => Number((bytes / 1024 ** 3).toFixed(2));
+  const cpus = os.cpus();
+
+  return Object.freeze({
+    hostname: os.hostname(),
+    platform: os.platform(),
+    osRelease: os.release(),
+    cpuCount: cpus.length,
+    cpuModel: cpus[0]?.model || 'Unknown',
+    totalMemoryGb: toGb(totalMem),
+    freeMemoryGb: toGb(freeMem),
+    uptimeHours: Number((os.uptime() / 3600).toFixed(2)),
+    homeDirectory: os.homedir()
+  });
+}
+
+/* ========================================================================== */
 /*                             TIMERS UTILITIES                               */
 /* ========================================================================== */
 
 /**
  * Asynchronously pauses execution for a specified number of milliseconds without blocking the event loop.
  *
- * How it works:
- * Unlike a synchronous while-loop (which freezes the entire thread, halting all I/O and HTTP requests),
- * `delay()` utilizes a JavaScript Promise and Node's event loop timer (`node:timers/promises`).
- * When you `await delay(1000)`, the JavaScript runtime is free to handle other background operations
- * until the timer expires and resumes your function.
- *
  * @param {number} milliseconds - Duration to pause in milliseconds. Must be a finite non-negative number.
  * @returns {Promise<void>} Resolves when the duration has elapsed.
  * @throws {TypeError} If milliseconds is not a finite number or is NaN.
  * @throws {RangeError} If milliseconds is negative (< 0).
- *
- * @example
- * import { delay } from 'node-core-easy-kit';
- *
- * console.log('Starting...');
- * await delay(1000); // Waits 1 second non-blockingly
- * console.log('1 second later!');
  */
 export async function delay(milliseconds) {
   if (typeof milliseconds !== 'number' || Number.isNaN(milliseconds) || !Number.isFinite(milliseconds)) {
@@ -412,6 +421,35 @@ export async function delay(milliseconds) {
 }
 
 /* ========================================================================== */
+/*                           PERFORMANCE UTILITIES                            */
+/* ========================================================================== */
+
+/**
+ * Measures the execution duration of an asynchronous function using Node's performance hooks.
+ *
+ * @template T
+ * @param {() => Promise<T>|T} asyncFn - Function to execute and benchmark.
+ * @returns {Promise<{ result: T, durationMs: number }>}
+ * @throws {TypeError} If asyncFn is not a function.
+ *
+ * @example
+ * import { measureTime, delay } from 'node-core-easy-kit';
+ * const { durationMs } = await measureTime(async () => await delay(100));
+ * console.log(`Took ${durationMs}ms`);
+ */
+export async function measureTime(asyncFn) {
+  if (typeof asyncFn !== 'function') {
+    throw new TypeError('Expected "asyncFn" to be a function.');
+  }
+
+  const start = performance.now();
+  const result = await asyncFn();
+  const durationMs = Number((performance.now() - start).toFixed(3));
+
+  return Object.freeze({ result, durationMs });
+}
+
+/* ========================================================================== */
 /*                             CRYPTO UTILITIES                               */
 /* ========================================================================== */
 
@@ -422,12 +460,6 @@ export async function delay(milliseconds) {
  * @param {string} [algorithm='sha256'] - Hash algorithm (e.g. 'sha256', 'sha512', 'md5').
  * @returns {string} The resulting hexadecimal hash digest.
  * @throws {TypeError} If content is not a string, or algorithm is not a non-empty string.
- *
- * @example
- * import { hashText } from 'node-core-easy-kit';
- *
- * const hash = hashText('hello world');
- * console.log(hash); // e.g. b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9
  */
 export function hashText(content, algorithm = 'sha256') {
   if (typeof content !== 'string') {
@@ -439,4 +471,18 @@ export function hashText(content, algorithm = 'sha256') {
   }
 
   return createHash(algorithm).update(content, 'utf8').digest('hex');
+}
+
+/**
+ * Generates a cryptographically secure random RFC 4122 version 4 UUID using Node's native crypto.
+ *
+ * @returns {string} A standard UUID string (e.g. '9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d').
+ *
+ * @example
+ * import { generateUuid } from 'node-core-easy-kit';
+ * const id = generateUuid();
+ * console.log(id);
+ */
+export function generateUuid() {
+  return randomUUID();
 }
