@@ -1,0 +1,38 @@
+{
+  "name": "node-core-easy-kit",
+  "version": "1.0.0",
+  "description": "A beginner-friendly Node.js utility kit exploring core modules: fs, path, process, and timers with zero external dependencies.",
+  "type": "module",
+  "main": "./src/index.js",
+  "exports": {
+    ".": "./src/index.js"
+  },
+  "files": [
+    "src",
+    "LICENSE"
+  ],
+  "scripts": {
+    "test": "node --test",
+    "demo": "node examples/demo.js"
+  },
+  "keywords": [
+    "nodejs",
+    "node-core",
+    "utilities",
+    "fs",
+    "path",
+    "process",
+    "timers",
+    "promises",
+    "async",
+    "beginner-friendly",
+    "zero-dependencies",
+    "esm"
+  ],
+  "author": "",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  }
+}
+
