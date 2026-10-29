@@ -9,16 +9,19 @@ import {
   readText,
   writeText,
   resolvePath,
-  getRuntimeInfo
+  getRuntimeInfo,
+  delay
 } from '../src/index.js';
 
 describe('node-core-easy-kit', () => {
   let tempDir;
 
+  // Set up an isolated temporary directory in the OS temp directory
   before(async () => {
     tempDir = await mkdtemp(path.join(tmpdir(), 'node-core-easy-kit-test-'));
   });
 
+  // Ensure all temporary test artifacts are completely removed after testing
   after(async () => {
     if (tempDir) {
       await rm(tempDir, { recursive: true, force: true });
@@ -45,6 +48,7 @@ describe('node-core-easy-kit', () => {
 
       assert.strictEqual(content, sampleText);
 
+      // Verify that the directory actually exists on disk
       const dirStats = await stat(path.dirname(nestedFilePath));
       assert.ok(dirStats.isDirectory());
     });
@@ -88,11 +92,13 @@ describe('node-core-easy-kit', () => {
     it('should reject invalid arguments for writeText', async () => {
       const validPath = path.join(tempDir, 'arg-test.txt');
 
+      // Invalid filePath
       await assert.rejects(async () => await writeText(null, 'hello'), TypeError);
       await assert.rejects(async () => await writeText('', 'hello'), TypeError);
       await assert.rejects(async () => await writeText('   ', 'hello'), TypeError);
       await assert.rejects(async () => await writeText(12345, 'hello'), TypeError);
 
+      // Invalid content
       await assert.rejects(async () => await writeText(validPath, 123), TypeError);
       await assert.rejects(async () => await writeText(validPath, null), TypeError);
       await assert.rejects(async () => await writeText(validPath, undefined), TypeError);
@@ -154,6 +160,7 @@ describe('node-core-easy-kit', () => {
       assert.strictEqual(info.PASSWORD, undefined);
       assert.strictEqual(info.API_KEY, undefined);
 
+      // Verify that the object only contains the 4 intended safe keys
       const keys = Object.keys(info).sort();
       assert.deepStrictEqual(keys, [
         'architecture',
@@ -172,4 +179,39 @@ describe('node-core-easy-kit', () => {
       }, TypeError);
     });
   });
+
+  describe('Timers and Asynchronous Programming Operations', () => {
+    it('should delay asynchronously for the specified duration', async () => {
+      const start = Date.now();
+      await delay(50);
+      const elapsed = Date.now() - start;
+
+      // Allow slight timer tolerance (e.g. 40ms minimum due to event loop scheduling)
+      assert.ok(elapsed >= 40, `Expected elapsed time >= 40ms, got ${elapsed}ms`);
+    });
+
+    it('should resolve immediately when delay is 0ms', async () => {
+      const start = Date.now();
+      await delay(0);
+      const elapsed = Date.now() - start;
+
+      assert.ok(elapsed < 100, `Expected delay(0) to resolve near instantaneously, took ${elapsed}ms`);
+    });
+
+    it('should reject negative durations with RangeError', async () => {
+      await assert.rejects(async () => await delay(-1), RangeError);
+      await assert.rejects(async () => await delay(-500), RangeError);
+    });
+
+    it('should reject non-finite, NaN, and non-number values with TypeError', async () => {
+      await assert.rejects(async () => await delay(NaN), TypeError);
+      await assert.rejects(async () => await delay(Infinity), TypeError);
+      await assert.rejects(async () => await delay(-Infinity), TypeError);
+      await assert.rejects(async () => await delay('1000'), TypeError);
+      await assert.rejects(async () => await delay(null), TypeError);
+      await assert.rejects(async () => await delay(undefined), TypeError);
+      await assert.rejects(async () => await delay({}), TypeError);
+    });
+  });
 });
+

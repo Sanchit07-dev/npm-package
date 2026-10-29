@@ -10,6 +10,7 @@
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import path from 'node:path';
 import process from 'node:process';
+import { setTimeout as sleep } from 'node:timers/promises';
 
 /**
  * Asynchronously reads a UTF-8 text file and returns its entire content as a string.
@@ -155,3 +156,37 @@ export function getRuntimeInfo() {
     workingDirectory: process.cwd()
   });
 }
+
+/**
+ * Asynchronously pauses execution for a specified number of milliseconds without blocking the event loop.
+ *
+ * How it works:
+ * Unlike a synchronous while-loop (which freezes the entire thread, halting all I/O and HTTP requests),
+ * `delay()` utilizes a JavaScript Promise and Node's event loop timer (`node:timers/promises`).
+ * When you `await delay(1000)`, the JavaScript runtime is free to handle other background operations
+ * until the timer expires and resumes your function.
+ *
+ * @param {number} milliseconds - Duration to pause in milliseconds. Must be a finite non-negative number.
+ * @returns {Promise<void>} Resolves when the duration has elapsed.
+ * @throws {TypeError} If milliseconds is not a finite number or is NaN.
+ * @throws {RangeError} If milliseconds is negative (< 0).
+ *
+ * @example
+ * import { delay } from 'node-core-easy-kit';
+ *
+ * console.log('Starting...');
+ * await delay(1000); // Waits 1 second non-blockingly
+ * console.log('1 second later!');
+ */
+export async function delay(milliseconds) {
+  if (typeof milliseconds !== 'number' || Number.isNaN(milliseconds) || !Number.isFinite(milliseconds)) {
+    throw new TypeError('Expected "milliseconds" to be a finite number.');
+  }
+
+  if (milliseconds < 0) {
+    throw new RangeError('Expected "milliseconds" to be a non-negative number (>= 0).');
+  }
+
+  await sleep(milliseconds);
+}
+
