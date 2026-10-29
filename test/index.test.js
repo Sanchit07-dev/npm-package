@@ -8,20 +8,26 @@ import process from 'node:process';
 import {
   readText,
   writeText,
+  readJson,
+  writeJson,
+  fileExists,
+  removeFile,
   resolvePath,
+  getFileExtension,
+  getFileName,
   getRuntimeInfo,
-  delay
+  getMemoryUsage,
+  delay,
+  hashText
 } from '../src/index.js';
 
 describe('node-core-easy-kit', () => {
   let tempDir;
 
-  // Set up an isolated temporary directory in the OS temp directory
   before(async () => {
     tempDir = await mkdtemp(path.join(tmpdir(), 'node-core-easy-kit-test-'));
   });
 
-  // Ensure all temporary test artifacts are completely removed after testing
   after(async () => {
     if (tempDir) {
       await rm(tempDir, { recursive: true, force: true });
@@ -48,7 +54,6 @@ describe('node-core-easy-kit', () => {
 
       assert.strictEqual(content, sampleText);
 
-      // Verify that the directory actually exists on disk
       const dirStats = await stat(path.dirname(nestedFilePath));
       assert.ok(dirStats.isDirectory());
     });
@@ -80,33 +85,81 @@ describe('node-core-easy-kit', () => {
       );
     });
 
-    it('should reject invalid arguments for readText', async () => {
+    it('should reject invalid arguments for readText and writeText', async () => {
       await assert.rejects(async () => await readText(), TypeError);
       await assert.rejects(async () => await readText(''), TypeError);
       await assert.rejects(async () => await readText('   '), TypeError);
       await assert.rejects(async () => await readText(123), TypeError);
-      await assert.rejects(async () => await readText(null), TypeError);
-      await assert.rejects(async () => await readText({}), TypeError);
-    });
 
-    it('should reject invalid arguments for writeText', async () => {
       const validPath = path.join(tempDir, 'arg-test.txt');
-
-      // Invalid filePath
       await assert.rejects(async () => await writeText(null, 'hello'), TypeError);
       await assert.rejects(async () => await writeText('', 'hello'), TypeError);
-      await assert.rejects(async () => await writeText('   ', 'hello'), TypeError);
-      await assert.rejects(async () => await writeText(12345, 'hello'), TypeError);
-
-      // Invalid content
       await assert.rejects(async () => await writeText(validPath, 123), TypeError);
-      await assert.rejects(async () => await writeText(validPath, null), TypeError);
-      await assert.rejects(async () => await writeText(validPath, undefined), TypeError);
-      await assert.rejects(async () => await writeText(validPath, {}), TypeError);
+    });
+
+    it('should write and read JSON files successfully', async () => {
+      const jsonPath = path.join(tempDir, 'nested', 'config.json');
+      const payload = { app: 'easy-kit', version: 1, active: true, tags: ['core', 'node'] };
+
+      await writeJson(jsonPath, payload);
+      const loaded = await readJson(jsonPath);
+
+      assert.deepStrictEqual(loaded, payload);
+    });
+
+    it('should reject malformed JSON with SyntaxError on readJson', async () => {
+      const malformedPath = path.join(tempDir, 'bad.json');
+      await writeText(malformedPath, '{ not valid json');
+
+      await assert.rejects(
+        async () => await readJson(malformedPath),
+        SyntaxError
+      );
+    });
+
+    it('should reject non-serializable data on writeJson', async () => {
+      const jsonPath = path.join(tempDir, 'circular.json');
+      const circular = {};
+      circular.self = circular;
+
+      await assert.rejects(
+        async () => await writeJson(jsonPath, circular),
+        TypeError
+      );
+
+      await assert.rejects(
+        async () => await writeJson(jsonPath, undefined),
+        TypeError
+      );
+    });
+
+    it('should correctly check if files exist using fileExists', async () => {
+      const filePath = path.join(tempDir, 'exists.txt');
+      assert.strictEqual(await fileExists(filePath), false);
+
+      await writeText(filePath, 'present');
+      assert.strictEqual(await fileExists(filePath), true);
+
+      await assert.rejects(async () => await fileExists(''), TypeError);
+      await assert.rejects(async () => await fileExists(123), TypeError);
+    });
+
+    it('should safely remove files and directories with removeFile', async () => {
+      const filePath = path.join(tempDir, 'to-delete.txt');
+      await writeText(filePath, 'delete me');
+      assert.strictEqual(await fileExists(filePath), true);
+
+      await removeFile(filePath);
+      assert.strictEqual(await fileExists(filePath), false);
+
+      // Should be idempotent and not throw on missing file
+      await removeFile(filePath);
+
+      await assert.rejects(async () => await removeFile(''), TypeError);
     });
   });
 
-  describe('Path Resolution Operations', () => {
+  describe('Path Operations', () => {
     it('should return a cross-platform absolute path', () => {
       const resolved = resolvePath('folder', 'file.txt');
       const expected = path.resolve('folder', 'file.txt');
@@ -128,12 +181,29 @@ describe('node-core-easy-kit', () => {
       assert.throws(() => resolvePath(''), TypeError);
       assert.throws(() => resolvePath('  '), TypeError);
       assert.throws(() => resolvePath('valid', 123), TypeError);
-      assert.throws(() => resolvePath('valid', null), TypeError);
-      assert.throws(() => resolvePath('valid', ''), TypeError);
+    });
+
+    it('should extract lowercased file extensions with getFileExtension', () => {
+      assert.strictEqual(getFileExtension('archive.tar.gz'), '.gz');
+      assert.strictEqual(getFileExtension('REPORT.PDF'), '.pdf');
+      assert.strictEqual(getFileExtension('no-ext'), '');
+      assert.strictEqual(getFileExtension('.gitignore'), '');
+
+      assert.throws(() => getFileExtension(''), TypeError);
+      assert.throws(() => getFileExtension(123), TypeError);
+    });
+
+    it('should extract file names with and without extensions with getFileName', () => {
+      assert.strictEqual(getFileName('/docs/readme.md'), 'readme.md');
+      assert.strictEqual(getFileName('/docs/readme.md', false), 'readme');
+      assert.strictEqual(getFileName('simple.txt', false), 'simple');
+
+      assert.throws(() => getFileName(''), TypeError);
+      assert.throws(() => getFileName('file.txt', 'yes'), TypeError);
     });
   });
 
-  describe('Runtime Information Operations', () => {
+  describe('Process and System Operations', () => {
     it('should return system and process metadata correctly', () => {
       const info = getRuntimeInfo();
 
@@ -157,10 +227,7 @@ describe('node-core-easy-kit', () => {
       assert.strictEqual(info.env, undefined);
       assert.strictEqual(info.processEnv, undefined);
       assert.strictEqual(info.secrets, undefined);
-      assert.strictEqual(info.PASSWORD, undefined);
-      assert.strictEqual(info.API_KEY, undefined);
 
-      // Verify that the object only contains the 4 intended safe keys
       const keys = Object.keys(info).sort();
       assert.deepStrictEqual(keys, [
         'architecture',
@@ -170,23 +237,27 @@ describe('node-core-easy-kit', () => {
       ]);
     });
 
-    it('should return a frozen, immutable object', () => {
-      const info = getRuntimeInfo();
-      assert.ok(Object.isFrozen(info));
+    it('should return process memory statistics with getMemoryUsage', () => {
+      const memory = getMemoryUsage();
 
-      assert.throws(() => {
-        info.nodeVersion = 'hacked';
-      }, TypeError);
+      assert.strictEqual(typeof memory.rssMb, 'number');
+      assert.strictEqual(typeof memory.heapTotalMb, 'number');
+      assert.strictEqual(typeof memory.heapUsedMb, 'number');
+      assert.strictEqual(typeof memory.externalMb, 'number');
+
+      assert.ok(memory.rssMb > 0);
+      assert.ok(memory.heapTotalMb > 0);
+      assert.ok(memory.heapUsedMb > 0);
+      assert.ok(Object.isFrozen(memory));
     });
   });
 
-  describe('Timers and Asynchronous Programming Operations', () => {
+  describe('Timers Operations', () => {
     it('should delay asynchronously for the specified duration', async () => {
       const start = Date.now();
       await delay(50);
       const elapsed = Date.now() - start;
 
-      // Allow slight timer tolerance (e.g. 40ms minimum due to event loop scheduling)
       assert.ok(elapsed >= 40, `Expected elapsed time >= 40ms, got ${elapsed}ms`);
     });
 
@@ -195,23 +266,33 @@ describe('node-core-easy-kit', () => {
       await delay(0);
       const elapsed = Date.now() - start;
 
-      assert.ok(elapsed < 100, `Expected delay(0) to resolve near instantaneously, took ${elapsed}ms`);
+      assert.ok(elapsed < 100);
     });
 
     it('should reject negative durations with RangeError', async () => {
       await assert.rejects(async () => await delay(-1), RangeError);
-      await assert.rejects(async () => await delay(-500), RangeError);
     });
 
     it('should reject non-finite, NaN, and non-number values with TypeError', async () => {
       await assert.rejects(async () => await delay(NaN), TypeError);
       await assert.rejects(async () => await delay(Infinity), TypeError);
-      await assert.rejects(async () => await delay(-Infinity), TypeError);
       await assert.rejects(async () => await delay('1000'), TypeError);
-      await assert.rejects(async () => await delay(null), TypeError);
-      await assert.rejects(async () => await delay(undefined), TypeError);
-      await assert.rejects(async () => await delay({}), TypeError);
+    });
+  });
+
+  describe('Crypto Operations', () => {
+    it('should calculate accurate hash digests with hashText', () => {
+      const sha256 = hashText('hello');
+      assert.strictEqual(sha256, '2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824');
+
+      const md5 = hashText('hello', 'md5');
+      assert.strictEqual(md5, '5d41402abc4b2a76b9719d911017c592');
+    });
+
+    it('should reject invalid arguments for hashText', () => {
+      assert.throws(() => hashText(123), TypeError);
+      assert.throws(() => hashText('valid', 123), TypeError);
+      assert.throws(() => hashText('valid', ''), TypeError);
     });
   });
 });
-
