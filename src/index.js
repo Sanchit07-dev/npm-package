@@ -9,6 +9,7 @@
 
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import path from 'node:path';
+import process from 'node:process';
 
 /**
  * Asynchronously reads a UTF-8 text file and returns its entire content as a string.
@@ -123,4 +124,34 @@ export function resolvePath(...parts) {
   }
 
   return path.resolve(...parts);
+}
+
+/**
+ * Returns safe, diagnostic runtime metadata about the current Node.js process and host system.
+ *
+ * Security Guarantee:
+ * This function NEVER inspects or returns environment variables (`process.env`), credentials,
+ * tokens, or secret keys. It only exposes safe, non-sensitive system architecture and environment facts.
+ *
+ * Properties returned:
+ * - `nodeVersion`: Current Node.js version string (e.g., 'v20.11.0').
+ * - `platform`: Operating system platform identifier (e.g., 'darwin', 'win32', 'linux').
+ * - `architecture`: CPU architecture (e.g., 'arm64', 'x64').
+ * - `workingDirectory`: The current working directory from which Node was launched (`process.cwd()`).
+ *
+ * @returns {{ nodeVersion: string, platform: string, architecture: string, workingDirectory: string }}
+ *
+ * @example
+ * import { getRuntimeInfo } from 'node-core-easy-kit';
+ *
+ * const info = getRuntimeInfo();
+ * console.log(`Running on Node ${info.nodeVersion} on ${info.platform} (${info.architecture})`);
+ */
+export function getRuntimeInfo() {
+  return Object.freeze({
+    nodeVersion: process.version,
+    platform: process.platform,
+    architecture: process.arch,
+    workingDirectory: process.cwd()
+  });
 }
