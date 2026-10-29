@@ -7,7 +7,85 @@
  * @module node-core-easy-kit
  */
 
+import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import path from 'node:path';
+
+/**
+ * Asynchronously reads a UTF-8 text file and returns its entire content as a string.
+ *
+ * How it works:
+ * Uses Node's built-in `node:fs/promises` to read files without blocking the main event loop.
+ * If the file does not exist, Node throws an error with `code: 'ENOENT'` ("Error NO ENTry"),
+ * preserving the original error code and stack trace for debugging.
+ *
+ * @param {string} filePath - Path to the file to read (relative or absolute).
+ * @returns {Promise<string>} The UTF-8 text content of the file.
+ * @throws {TypeError} If filePath is not a valid non-empty string.
+ * @throws {NodeJS.ErrnoException} If a filesystem error occurs (e.g., file not found).
+ *
+ * @example
+ * import { readText } from 'node-core-easy-kit';
+ *
+ * try {
+ *   const content = await readText('./notes.txt');
+ *   console.log(content);
+ * } catch (error) {
+ *   if (error.code === 'ENOENT') {
+ *     console.error('File not found!');
+ *   }
+ * }
+ */
+export async function readText(filePath) {
+  if (typeof filePath !== 'string' || filePath.trim().length === 0) {
+    throw new TypeError('Expected "filePath" to be a non-empty string.');
+  }
+
+  // Uses UTF-8 encoding so the returned value is a decoded string, not a raw Buffer.
+  return await readFile(filePath, { encoding: 'utf8' });
+}
+
+/**
+ * Asynchronously writes UTF-8 text to a file, automatically creating any missing parent directories.
+ *
+ * IMPORTANT NOTE ON OVERWRITING:
+ * If the target file already exists, its contents will be completely overwritten.
+ * If the file does not exist, it will be created.
+ *
+ * How it works:
+ * 1. Computes the parent directory using `path.dirname(filePath)`.
+ * 2. Uses `mkdir(parentDir, { recursive: true })` to safely create any missing folders in the path.
+ * 3. Writes the content using UTF-8 encoding.
+ *
+ * @param {string} filePath - Target file destination path.
+ * @param {string} content - Text content to write into the file.
+ * @returns {Promise<void>} Resolves when writing finishes.
+ * @throws {TypeError} If filePath is not a non-empty string, or content is not a string.
+ * @throws {NodeJS.ErrnoException} If the filesystem rejects writing (e.g., permission denied).
+ *
+ * @example
+ * import { writeText } from 'node-core-easy-kit';
+ *
+ * // Automatically creates 'nested/folder/' if it doesn't exist yet!
+ * await writeText('./nested/folder/log.txt', 'Operation successful at ' + new Date().toISOString());
+ */
+export async function writeText(filePath, content) {
+  if (typeof filePath !== 'string' || filePath.trim().length === 0) {
+    throw new TypeError('Expected "filePath" to be a non-empty string.');
+  }
+
+  if (typeof content !== 'string') {
+    throw new TypeError('Expected "content" to be a string.');
+  }
+
+  const parentDir = path.dirname(filePath);
+
+  // 'recursive: true' ensures nested folders are created safely without failing if they already exist
+  if (parentDir && parentDir !== '.') {
+    await mkdir(parentDir, { recursive: true });
+  }
+
+  await writeFile(filePath, content, { encoding: 'utf8' });
+}
 
 /**
  * Resolves a sequence of paths or path segments into an absolute, normalized path.
