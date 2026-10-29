@@ -12,13 +12,20 @@ import {
   writeJson,
   fileExists,
   removeFile,
+  listDirectory,
+  getFileSize,
   resolvePath,
   getFileExtension,
   getFileName,
+  pathToUrl,
+  urlToPath,
   getRuntimeInfo,
   getMemoryUsage,
+  getSystemInfo,
   delay,
-  hashText
+  measureTime,
+  hashText,
+  generateUuid
 } from '../src/index.js';
 
 describe('node-core-easy-kit', () => {
@@ -152,10 +159,36 @@ describe('node-core-easy-kit', () => {
       await removeFile(filePath);
       assert.strictEqual(await fileExists(filePath), false);
 
-      // Should be idempotent and not throw on missing file
+      // Idempotent
       await removeFile(filePath);
 
       await assert.rejects(async () => await removeFile(''), TypeError);
+    });
+
+    it('should list directory contents with listDirectory', async () => {
+      const subDir = path.join(tempDir, 'list-test');
+      await writeText(path.join(subDir, 'a.txt'), 'a');
+      await writeText(path.join(subDir, 'b.txt'), 'b');
+
+      const entries = await listDirectory(subDir);
+      assert.strictEqual(entries.length, 2);
+
+      const names = entries.map((e) => e.name).sort();
+      assert.deepStrictEqual(names, ['a.txt', 'b.txt']);
+      assert.ok(entries.every((e) => e.isFile));
+
+      await assert.rejects(async () => await listDirectory(''), TypeError);
+    });
+
+    it('should get formatted file size with getFileSize', async () => {
+      const filePath = path.join(tempDir, 'size.txt');
+      await writeText(filePath, '1234567890');
+
+      const size = await getFileSize(filePath);
+      assert.strictEqual(size.bytes, 10);
+      assert.strictEqual(size.formatted, '10 B');
+
+      await assert.rejects(async () => await getFileSize(''), TypeError);
     });
   });
 
@@ -200,6 +233,25 @@ describe('node-core-easy-kit', () => {
 
       assert.throws(() => getFileName(''), TypeError);
       assert.throws(() => getFileName('file.txt', 'yes'), TypeError);
+    });
+  });
+
+  describe('URL Operations', () => {
+    it('should convert path to file URL and back using pathToUrl and urlToPath', () => {
+      const filePath = path.resolve('test-file.js');
+      const url = pathToUrl(filePath);
+
+      assert.ok(url.startsWith('file://'));
+      const roundTripPath = urlToPath(url);
+
+      assert.strictEqual(roundTripPath, filePath);
+    });
+
+    it('should reject invalid arguments for pathToUrl and urlToPath', () => {
+      assert.throws(() => pathToUrl(''), TypeError);
+      assert.throws(() => pathToUrl(123), TypeError);
+      assert.throws(() => urlToPath(''), TypeError);
+      assert.throws(() => urlToPath(null), TypeError);
     });
   });
 
@@ -250,9 +302,23 @@ describe('node-core-easy-kit', () => {
       assert.ok(memory.heapUsedMb > 0);
       assert.ok(Object.isFrozen(memory));
     });
+
+    it('should return host system hardware telemetry with getSystemInfo', () => {
+      const sys = getSystemInfo();
+
+      assert.strictEqual(typeof sys.hostname, 'string');
+      assert.strictEqual(typeof sys.platform, 'string');
+      assert.strictEqual(typeof sys.cpuCount, 'number');
+      assert.ok(sys.cpuCount > 0);
+      assert.strictEqual(typeof sys.totalMemoryGb, 'number');
+      assert.ok(sys.totalMemoryGb > 0);
+      assert.strictEqual(typeof sys.freeMemoryGb, 'number');
+      assert.ok(sys.freeMemoryGb > 0);
+      assert.ok(Object.isFrozen(sys));
+    });
   });
 
-  describe('Timers Operations', () => {
+  describe('Timers and Performance Operations', () => {
     it('should delay asynchronously for the specified duration', async () => {
       const start = Date.now();
       await delay(50);
@@ -278,6 +344,18 @@ describe('node-core-easy-kit', () => {
       await assert.rejects(async () => await delay(Infinity), TypeError);
       await assert.rejects(async () => await delay('1000'), TypeError);
     });
+
+    it('should benchmark execution duration accurately with measureTime', async () => {
+      const { result, durationMs } = await measureTime(async () => {
+        await delay(30);
+        return 'done';
+      });
+
+      assert.strictEqual(result, 'done');
+      assert.ok(durationMs >= 25, `Expected duration >= 25ms, got ${durationMs}ms`);
+
+      await assert.rejects(async () => await measureTime('not a function'), TypeError);
+    });
   });
 
   describe('Crypto Operations', () => {
@@ -293,6 +371,16 @@ describe('node-core-easy-kit', () => {
       assert.throws(() => hashText(123), TypeError);
       assert.throws(() => hashText('valid', 123), TypeError);
       assert.throws(() => hashText('valid', ''), TypeError);
+    });
+
+    it('should generate valid UUID v4 strings with generateUuid', () => {
+      const id1 = generateUuid();
+      const id2 = generateUuid();
+
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+      assert.match(id1, uuidRegex);
+      assert.match(id2, uuidRegex);
+      assert.notStrictEqual(id1, id2);
     });
   });
 });
