@@ -2,13 +2,13 @@
  * demo.js
  *
  * An interactive demonstration of node-core-easy-kit.
- * Shows all 4 core Node.js concepts and 5 public API functions in action:
+ * Shows core Node.js concepts and public API functions in action:
  *
- * 1. resolvePath   (node:path)
- * 2. writeText     (node:fs/promises)
- * 3. readText      (node:fs/promises)
- * 4. getRuntimeInfo(node:process)
- * 5. delay         (node:timers/promises)
+ * 1. Path Utilities: resolvePath, getFileName, getFileExtension
+ * 2. File System Utilities: writeText, readText, writeJson, readJson, fileExists, removeFile
+ * 3. Process & Telemetry: getRuntimeInfo, getMemoryUsage
+ * 4. Timers & Async: delay
+ * 5. Crypto Utilities: hashText
  *
  * Run this demo:
  *   node examples/demo.js
@@ -18,97 +18,116 @@
 
 import {
   resolvePath,
+  getFileName,
+  getFileExtension,
   writeText,
   readText,
+  writeJson,
+  readJson,
+  fileExists,
+  removeFile,
   getRuntimeInfo,
-  delay
+  getMemoryUsage,
+  delay,
+  hashText
 } from '../src/index.js';
 
 async function main() {
   console.log('====================================================');
-  console.log('   🚀 Welcome to the node-core-easy-kit Live Demo   ');
+  console.log('   🚀 Welcome to the node-core-easy-kit Demo        ');
   console.log('====================================================\n');
 
   // --------------------------------------------------------------------------
-  // STEP 1: PATH RESOLUTION (node:path)
+  // STEP 1: PATH UTILITIES (node:path)
   // --------------------------------------------------------------------------
-  console.log('📌 STEP 1: Resolving a Cross-Platform Absolute Path');
+  console.log('📌 STEP 1: Path Utilities (node:path)');
   console.log('----------------------------------------------------');
-  console.log('Concept: "path.resolve" normalizes relative segments into an unambiguous');
-  console.log('absolute path from your current working directory.\n');
 
   const demoFilePath = resolvePath('examples', 'output', 'demo-note.txt');
-  console.log(`Resolved Target File: \x1b[36m${demoFilePath}\x1b[0m\n`);
+  console.log(`• Resolved Path : \x1b[36m${demoFilePath}\x1b[0m`);
+  console.log(`• File Name     : \x1b[36m${getFileName(demoFilePath)}\x1b[0m`);
+  console.log(`• Base (no ext) : \x1b[36m${getFileName(demoFilePath, false)}\x1b[0m`);
+  console.log(`• Extension     : \x1b[36m${getFileExtension(demoFilePath)}\x1b[0m\n`);
 
   // --------------------------------------------------------------------------
-  // STEP 2: FILE SYSTEM WRITE (node:fs/promises)
+  // STEP 2: FILE SYSTEM WRITE & READ (node:fs/promises)
   // --------------------------------------------------------------------------
-  console.log('📌 STEP 2: Writing UTF-8 Text to Disk');
+  console.log('📌 STEP 2: File System Operations (node:fs/promises)');
   console.log('----------------------------------------------------');
-  console.log('Concept: "writeText" creates missing parent directories automatically');
-  console.log('and writes UTF-8 text. Notice: writing to an existing file will overwrite it!\n');
 
-  const timestamp = new Date().toLocaleString();
-  const demoContent = [
-    '========================================',
-    ' Hello from node-core-easy-kit!',
-    '========================================',
-    `Timestamp : ${timestamp}`,
-    'Status    : Written successfully with zero external dependencies.',
-    'Rule      : Overwrites existing file content if present.',
-    'Safety    : Missing parent directories created automatically.'
-  ].join('\n');
+  const textContent = 'Hello from node-core-easy-kit! Written with zero dependencies.';
+  await writeText(demoFilePath, textContent);
+  console.log('✅ Wrote UTF-8 text file.');
 
-  await writeText(demoFilePath, demoContent);
-  console.log('✅ File successfully written to:');
-  console.log(`   ${demoFilePath}\n`);
+  const readBack = await readText(demoFilePath);
+  console.log(`📄 Read text back: "\x1b[32m${readBack}\x1b[0m"`);
+
+  const jsonFilePath = resolvePath('examples', 'output', 'config.json');
+  const sampleConfig = {
+    appName: 'easy-kit-demo',
+    features: ['fs', 'path', 'process', 'timers', 'crypto'],
+    ready: true,
+    createdAt: new Date().toISOString()
+  };
+
+  await writeJson(jsonFilePath, sampleConfig);
+  console.log('✅ Wrote JSON file with automatic directory creation.');
+
+  const configRead = await readJson(jsonFilePath);
+  console.log(`📊 Read JSON back: \x1b[33m${configRead.appName}\x1b[0m with \x1b[33m${configRead.features.length}\x1b[0m features`);
+
+  const exists = await fileExists(jsonFilePath);
+  console.log(`🔍 File exists check: \x1b[32m${exists}\x1b[0m\n`);
 
   // --------------------------------------------------------------------------
-  // STEP 3: FILE SYSTEM READ (node:fs/promises)
+  // STEP 3: CRYPTO HASHING (node:crypto)
   // --------------------------------------------------------------------------
-  console.log('📌 STEP 3: Reading UTF-8 Text from Disk');
+  console.log('📌 STEP 3: Cryptographic Hashing (node:crypto)');
   console.log('----------------------------------------------------');
-  console.log('Concept: "readText" reads files asynchronously without blocking the');
-  console.log('event loop and preserves original error codes (like ENOENT) if missing.\n');
 
-  const fileContent = await readText(demoFilePath);
-  console.log('📄 File Contents:');
-  console.log('\x1b[32m' + fileContent + '\x1b[0m\n');
+  const textDigest = hashText(textContent, 'sha256');
+  console.log(`• Content: "${textContent}"`);
+  console.log(`• SHA-256: \x1b[35m${textDigest}\x1b[0m\n`);
 
   // --------------------------------------------------------------------------
-  // STEP 4: PROCESS METADATA (node:process)
+  // STEP 4: PROCESS & MEMORY TELEMETRY (node:process)
   // --------------------------------------------------------------------------
-  console.log('📌 STEP 4: Diagnostic Runtime Information');
+  console.log('📌 STEP 4: Safe Process Telemetry (node:process)');
   console.log('----------------------------------------------------');
-  console.log('Concept: Safe diagnostic telemetry. Never exposes process.env or secrets!\n');
 
   const runtimeInfo = getRuntimeInfo();
-  console.log('⚙️  Host Runtime Details:');
-  console.log(`   • Node Version     : \x1b[33m${runtimeInfo.nodeVersion}\x1b[0m`);
-  console.log(`   • OS Platform      : \x1b[33m${runtimeInfo.platform}\x1b[0m`);
-  console.log(`   • CPU Architecture : \x1b[33m${runtimeInfo.architecture}\x1b[0m`);
-  console.log(`   • Working Directory: \x1b[33m${runtimeInfo.workingDirectory}\x1b[0m\n`);
+  console.log(`• Node Version : \x1b[33m${runtimeInfo.nodeVersion}\x1b[0m`);
+  console.log(`• Platform     : \x1b[33m${runtimeInfo.platform} (${runtimeInfo.architecture})\x1b[0m`);
+  console.log(`• Directory    : \x1b[33m${runtimeInfo.workingDirectory}\x1b[0m`);
+
+  const memory = getMemoryUsage();
+  console.log(`• Memory RSS   : \x1b[33m${memory.rssMb} MB\x1b[0m`);
+  console.log(`• Heap Used    : \x1b[33m${memory.heapUsedMb} MB / ${memory.heapTotalMb} MB\x1b[0m\n`);
 
   // --------------------------------------------------------------------------
   // STEP 5: TIMERS & ASYNC DELAY (node:timers/promises)
   // --------------------------------------------------------------------------
   console.log('📌 STEP 5: Asynchronous Non-Blocking Delay');
   console.log('----------------------------------------------------');
-  console.log('Concept: Promises & async/await let the Node.js event loop breathe.');
-  console.log('While waiting, Node can process incoming HTTP requests or file I/O.\n');
 
-  const waitTimeMs = 1200;
-  process.stdout.write(`⏳ Pausing execution for ${waitTimeMs}ms non-blockingly... `);
-  await delay(waitTimeMs);
+  const delayMs = 600;
+  process.stdout.write(`⏳ Pausing for ${delayMs}ms non-blockingly... `);
+  await delay(delayMs);
   console.log('✅ Resumed!\n');
 
-  console.log('====================================================');
-  console.log('   🎉 Demo Completed Successfully with Zero Errors! ');
+  // --------------------------------------------------------------------------
+  // CLEANUP DEMO OUTPUT FILES
+  // --------------------------------------------------------------------------
+  await removeFile(demoFilePath);
+  await removeFile(jsonFilePath);
+  console.log('🧹 Cleaned up temporary demo files safely using removeFile.');
+
+  console.log('\n====================================================');
+  console.log('   🎉 Enhanced Demo Completed with Zero Errors!     ');
   console.log('====================================================');
 }
 
 main().catch((error) => {
-  console.error('❌ Demo encountered an unexpected error:', error);
+  console.error('❌ Demo encountered an error:', error);
   process.exitCode = 1;
 });
-
